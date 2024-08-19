@@ -1,10 +1,10 @@
-import express from "express";
-import { Server } from "socket.io";
-import { createServer } from "http";
-import cors from "cors";
-import mongoose from "mongoose";
-import dotenv from "dotenv";
-import { Message } from "./models/userModel.js"; // Import the message model
+const express = require("express");
+const { Server } = require("socket.io");
+const { createServer } = require("http");
+const cors = require("cors");
+const multer = require("multer"); // Import multer for file uploads
+const path = require("path");
+const dotenv = require("dotenv");
 
 dotenv.config();
 
@@ -12,12 +12,18 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const server = createServer(app);
 
-// Connect to MongoDB
-// mongoose.connect(process.env.MONGO_URI, {
-//   useNewUrlParser: true,
-//   useUnifiedTopology: true,
-// }).then(() => console.log("MongoDB connected"))
-//   .catch(err => console.log("MongoDB connection error: ", err));
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, path.join(__dirname, "public")); 
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(null, `${file.fieldname}-${uniqueSuffix}${path.extname(file.originalname)}`);
+  },
+});
+
+const upload = multer({ storage });
 
 app.use(cors({
   origin: "*",
@@ -26,6 +32,15 @@ app.use(cors({
 }));
 
 app.use(express.json()); // Add this to parse JSON requests
+app.use("/upload", express.static(path.join(__dirname, "public"))); // Serve the uploaded files statically
+app.use(express.static(path.join(__dirname, "public")));
+app.post("/upload", upload.single("file"), (req, res) => {
+  const file = req.file;
+  if (!file) {
+    return res.status(400).send("No file uploaded.");
+  }
+  res.json({ fileName: file.originalname, filePath: `/upload/${file.filename}` });
+});
 
 const io = new Server(server, {
   cors: {
@@ -39,50 +54,35 @@ app.get("/", (req, res) => {
   res.send("Hello world");
 });
 
+const users = {}; // To keep track of connected users
+
 io.on("connection", (socket) => {
-  console.log("User connected with ID -> ", socket.id);
+  const userId = Math.floor(Math.random() * 999999);
+  socket.userId = userId;
+  users[userId] = socket.id;
 
-  let username = '';
+  socket.emit("user-id", userId);
 
-  // Handle setting a username
-  socket.on("set-username", (name) => {
-    username = name;
-    socket.broadcast.emit("user-connected", { userId: socket.id, username });
-    console.log(`${username} connected with ID ${socket.id}`);
+  socket.on("set-username", (username) => {
+    socket.username = username;
   });
 
-  // Handle incoming messages
-  socket.on("message", async ({ message, roomId }) => {
-    console.log(`Received message: ${message} in room: ${roomId}`);
-
-    // Save the message to the database
-    // const newMessage = new Message({
-    //   roomId,
-    //   senderId: socket.id,
-    //   message,
-    // });
-
-    try {
-      // await newMessage.save();
-      // console.log("Message saved to database");
-
-      // Emit the message to all users in the room
-      io.to(roomId).emit("received-message", { message, senderId: socket.id, senderUsername: username });
-    } catch (err) {
-      console.error("Error saving message: ", err);
-    }
+  socket.on("join-room", (roomId) => {
+    socket.join(roomId);
+    socket.to(roomId).emit("user-connected", { userId: socket.userId, username: socket.username });
   });
 
-  // Handle joining a room
-  socket.on("join-room", (room) => {
-    socket.join(room);
-    console.log(`User joined room ${room}`);
+  socket.on("message", ({ message, roomId }) => {
+    io.to(roomId).emit("received-message", { message, senderId: socket.userId, senderUsername: socket.username });
+  });
+
+  socket.on("file-upload", ({ roomId, fileName, filePath }) => {
+    io.to(roomId).emit("file-received", { fileName, filePath, senderId: socket.userId, senderUsername: socket.username });
   });
 
   socket.on("disconnect", () => {
-    console.log("User disconnected", socket.id);
-    // Notify all users in the room that a user has disconnected
-    socket.broadcast.emit("user-disconnected", { userId: socket.id, username });
+    delete users[socket.userId];
+    socket.broadcast.emit("user-disconnected", { userId: socket.userId, username: socket.username });
   });
 });
 

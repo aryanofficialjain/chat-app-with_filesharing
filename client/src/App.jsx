@@ -1,38 +1,47 @@
 import { io } from "socket.io-client";
 import { useEffect, useState } from "react";
-import './index.css'
+import './index.css';
+import axios from 'axios';
 
 const App = () => {
   const [username, setUsername] = useState("");
   const [message, setMessage] = useState("");
-  const [roomId] = useState("lambo");
+  const [roomId, setRoomId] = useState("");
   const [socketId, setSocketId] = useState("");
   const [allMessages, setAllMessages] = useState([]);
   const [users, setUsers] = useState({});
   const [socket, setSocket] = useState(null);
   const [hasJoined, setHasJoined] = useState(false);
-
-  console.log(users);
+  const [file, setFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(""); // State for preview URL
 
   useEffect(() => {
     const socketInstance = io("http://localhost:3000");
     setSocket(socketInstance);
 
     socketInstance.on("connect", () => {
-      setSocketId(socketInstance.id);
-      console.log("connected", socketInstance.id);
+      console.log("Connected to server");
+    });
+
+    socketInstance.on("user-id", (userId) => {
+      setSocketId(userId);
+      console.log(`Received user ID: ${userId}`);
     });
 
     socketInstance.on("received-message", ({ message, senderId, senderUsername }) => {
-      setAllMessages((prevMessages) => [...prevMessages, { message, senderId, senderUsername }]);
+      setAllMessages(prevMessages => [...prevMessages, { message, senderId, senderUsername }]);
+    });
+
+    socketInstance.on("file-received", ({ fileName, filePath, senderId, senderUsername }) => {
+      setAllMessages(prevMessages => [...prevMessages, { fileName, filePath, senderId, senderUsername, isFile: true }]);
     });
 
     socketInstance.on("user-connected", ({ userId, username }) => {
-      setUsers((prevUsers) => ({ ...prevUsers, [userId]: username }));
+      setUsers(prevUsers => ({ ...prevUsers, [userId]: username }));
     });
 
-    socketInstance.on("user-disconnected", ({ userId, username }) => {
-      setUsers((prevUsers) => {
+    socketInstance.on("user-disconnected", ({ userId }) => {
+      setUsers(prevUsers => {
         const updatedUsers = { ...prevUsers };
         delete updatedUsers[userId];
         return updatedUsers;
@@ -52,11 +61,37 @@ const App = () => {
   }, [socket, username, hasJoined, roomId]);
 
   const handleJoin = () => {
-    if (username.trim() === "") {
-      alert("Username cannot be empty");
+    if (username.trim() === "" || roomId.trim() === "") {
+      alert("Username and Room ID cannot be empty");
       return;
     }
     setHasJoined(true);
+  };
+
+  const handleFileChange = (e) => {
+    const selectedFile = e.target.files[0];
+    setFile(selectedFile);
+    setPreviewUrl(URL.createObjectURL(selectedFile)); // Generate preview URL
+  };
+
+  const handleFileUpload = async () => {
+    if (file && socket) {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      try {
+        const res = await axios.post("http://localhost:3000/upload", formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+
+        const { fileName, filePath } = res.data;
+        socket.emit("file-upload", { roomId, fileName, filePath });
+        setFile(null); // Clear file input after upload
+        setPreviewUrl(""); // Clear preview after upload
+      } catch (error) {
+        console.error("File upload failed:", error);
+      }
+    }
   };
 
   const handleSubmit = (e) => {
@@ -85,6 +120,13 @@ const App = () => {
               onChange={(e) => setUsername(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
+            <input
+              type="text"
+              placeholder="Enter Room ID"
+              value={roomId}
+              onChange={(e) => setRoomId(e.target.value)}
+              className="w-full mt-4 px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
             <button
               onClick={handleJoin}
               className="w-full mt-4 bg-blue-500 text-white py-2 rounded-md hover:bg-blue-600 transition duration-150"
@@ -103,27 +145,73 @@ const App = () => {
                 onChange={(e) => setMessage(e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+              <input
+                type="file"
+                onChange={handleFileChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+
+              {previewUrl && ( // Display the preview if available
+                <div className="mb-4">
+                  <h4 className="text-lg font-semibold">Preview:</h4>
+                  <img src={previewUrl} alt="Preview" className="w-full rounded-md shadow-md" />
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleFileUpload}
+                className="w-full bg-green-500 text-white py-2 rounded-md hover:bg-green-600 transition duration-150 mb-4"
+              >
+                Upload File
+              </button>
               <button
                 type="submit"
                 className="w-full bg-blue-500 text-white py-2 rounded-md hover:bg-blue-600 transition duration-150"
               >
-                Send
+                Send Message
               </button>
             </form>
-            <div className="mt-6 flex-grow overflow-auto">
-              <h2 className="text-lg font-semibold mb-2">Messages:</h2>
-              <div className="flex flex-col space-y-2">
+
+            {/* Messages and Files */}
+            <div className="mt-6">
+              <h4 className="text-lg font-semibold mb-2">Messages</h4>
+              <ul className="space-y-4">
                 {allMessages.map((msg, index) => (
-                  <div
+                  <li
                     key={index}
-                    className={`p-3 rounded-md ${msg.senderId === socketId ? "bg-blue-100 text-right ml-auto" : "bg-gray-200 text-left mr-auto"}`}
-                    style={{ alignSelf: msg.senderId === socketId ? "flex-end" : "flex-start" }}
+                    className={`p-4 rounded-lg shadow ${
+                      msg.senderId === socketId
+                        ? "bg-blue-100 text-right"
+                        : "bg-gray-100 text-left"
+                    }`}
                   >
-                    <p className="font-semibold">{msg.senderUsername || "Anonymous"}:</p>
-                    <p>{msg.message}</p>
-                  </div>
+                    {msg.isFile && msg.filePath.match(/\.(jpeg|jpg|png|gif)$/) ? (
+                      <div>
+                        <strong>{msg.senderUsername}:</strong>
+                        <a href={`http://localhost:3000${msg.filePath}`} target="_blank" download>
+                          <img
+                            src={`http://localhost:3000${msg.filePath}`}
+                            alt={msg.fileName}
+                            className="w-full max-w-xs rounded-md shadow-md mt-2"
+                          />
+                        </a>
+                      </div>
+                    ) : msg.isFile ? (
+                      <div>
+                        <strong>{msg.senderUsername}:</strong>
+                        <a href={`http://localhost:3000${msg.filePath}`} download>
+                          {msg.fileName}
+                        </a>
+                      </div>
+                    ) : (
+                      <div>
+                        <strong>{msg.senderUsername}:</strong> {msg.message}
+                      </div>
+                    )}
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
           </div>
         )}
