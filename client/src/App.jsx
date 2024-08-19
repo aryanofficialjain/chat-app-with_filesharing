@@ -14,6 +14,7 @@ const App = () => {
   const [hasJoined, setHasJoined] = useState(false);
   const [file, setFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(""); // State for preview URL
+  const [directMessageUserId, setDirectMessageUserId] = useState(""); // New state for direct message
 
   useEffect(() => {
     const socketInstance = io("http://localhost:3000");
@@ -28,8 +29,8 @@ const App = () => {
       console.log(`Received user ID: ${userId}`);
     });
 
-    socketInstance.on("received-message", ({ message, senderId, senderUsername }) => {
-      setAllMessages(prevMessages => [...prevMessages, { message, senderId, senderUsername }]);
+    socketInstance.on("received-message", ({ message, senderId, senderUsername, isDirect }) => {
+      setAllMessages(prevMessages => [...prevMessages, { message, senderId, senderUsername, isDirect }]);
     });
 
     socketInstance.on("file-received", ({ fileName, filePath, senderId, senderUsername }) => {
@@ -104,6 +105,16 @@ const App = () => {
     }
   };
 
+  const handleDirectMessage = (e) => {
+    e.preventDefault();
+    if (socket && socket.connected && directMessageUserId) {
+      socket.emit("direct-message", { message, targetUserId: directMessageUserId });
+      setMessage("");
+    } else {
+      console.error("Socket is not connected or Direct Message User ID is missing");
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen bg-gray-100">
       <header className="bg-blue-500 text-white py-4 px-6 shadow-md">
@@ -151,10 +162,14 @@ const App = () => {
                 className="w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
 
-              {previewUrl && ( // Display the preview if available
+              {previewUrl && (
                 <div className="mb-4">
                   <h4 className="text-lg font-semibold">Preview:</h4>
-                  <img src={previewUrl} alt="Preview" className="w-full rounded-md shadow-md" />
+                  <img
+                    src={previewUrl}
+                    alt="Preview"
+                    className="w-full rounded-md shadow-md"
+                  />
                 </div>
               )}
 
@@ -173,6 +188,23 @@ const App = () => {
               </button>
             </form>
 
+            {/* Direct Message Form */}
+            <form onSubmit={handleDirectMessage} className="flex flex-col mt-4">
+              <input
+                type="text"
+                placeholder="Direct Message User ID"
+                value={directMessageUserId}
+                onChange={(e) => setDirectMessageUserId(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                type="submit"
+                className="w-full bg-red-500 text-white py-2 rounded-md hover:bg-red-600 transition duration-150"
+              >
+                Send Direct Message
+              </button>
+            </form>
+
             {/* Messages and Files */}
             <div className="mt-6">
               <h4 className="text-lg font-semibold mb-2">Messages</h4>
@@ -184,12 +216,16 @@ const App = () => {
                       msg.senderId === socketId
                         ? "bg-blue-100 text-right"
                         : "bg-gray-100 text-left"
-                    }`}
+                    } ${msg.isDirect ? "bg-red-100" : ""}`}
                   >
                     {msg.isFile && msg.filePath.match(/\.(jpeg|jpg|png|gif)$/) ? (
                       <div>
                         <strong>{msg.senderUsername}:</strong>
-                        <a href={`http://localhost:3000${msg.filePath}`} target="_blank" download>
+                        <a
+                          href={`http://localhost:3000${msg.filePath}`}
+                          target="_blank"
+                          download
+                        >
                           <img
                             src={`http://localhost:3000${msg.filePath}`}
                             alt={msg.fileName}
@@ -200,7 +236,11 @@ const App = () => {
                     ) : msg.isFile ? (
                       <div>
                         <strong>{msg.senderUsername}:</strong>
-                        <a href={`http://localhost:3000${msg.filePath}`} download>
+                        <a
+                          href={`http://localhost:3000${msg.filePath}`}
+                          target="_blank"
+                          download
+                        >
                           {msg.fileName}
                         </a>
                       </div>
