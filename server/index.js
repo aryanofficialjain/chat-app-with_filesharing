@@ -54,6 +54,7 @@ app.get("/", (req, res) => {
 });
 
 const users = {}; // To keep track of connected users
+const roomUsers = {}; // To keep track of users in each room
 
 io.on("connection", (socket) => {
   const userId = Math.floor(Math.random() * 999999);
@@ -68,7 +69,18 @@ io.on("connection", (socket) => {
 
   socket.on("join-room", (roomId) => {
     socket.join(roomId);
+    if (!roomUsers[roomId]) {
+      roomUsers[roomId] = {};
+    }
+    roomUsers[roomId][socket.userId] = socket.username;
+
     socket.to(roomId).emit("user-connected", { userId: socket.userId, username: socket.username });
+    
+    // Notify the user who just joined
+    socket.emit("notification", { type: "info", message: `You have joined room ${roomId}` });
+    
+    // Notify all users in the room
+    io.to(roomId).emit("notification", { type: "info", message: `${socket.username} has joined the room` });
   });
 
   socket.on("message", ({ message, roomId }) => {
@@ -101,8 +113,21 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    delete users[socket.userId];
-    socket.broadcast.emit("user-disconnected", { userId: socket.userId, username: socket.username });
+    const userId = socket.userId;
+    const username = socket.username;
+    delete users[userId];
+
+    // Notify all users in rooms the disconnected user was part of
+    Object.keys(roomUsers).forEach(roomId => {
+      if (roomUsers[roomId][userId]) {
+        delete roomUsers[roomId][userId];
+        socket.to(roomId).emit("user-disconnected", { userId, username });
+        io.to(roomId).emit("notification", { type: "info", message: `${username} has left the room` });
+      }
+    });
+
+    // Notify all connected clients
+    socket.broadcast.emit("notification", { type: "info", message: `${username} has disconnected` });
   });
 });
 

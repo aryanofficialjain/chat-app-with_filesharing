@@ -2,6 +2,7 @@ import { io } from "socket.io-client";
 import { useEffect, useState } from "react";
 import './index.css';
 import axios from 'axios';
+import React from "react";
 
 const App = () => {
   const [username, setUsername] = useState("");
@@ -15,6 +16,7 @@ const App = () => {
   const [file, setFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(""); // State for preview URL
   const [directMessageUserId, setDirectMessageUserId] = useState(""); // New state for direct message
+  const [notifications, setNotifications] = useState([]); // State for notifications
 
   useEffect(() => {
     const socketInstance = io("http://localhost:3000");
@@ -39,14 +41,22 @@ const App = () => {
 
     socketInstance.on("user-connected", ({ userId, username }) => {
       setUsers(prevUsers => ({ ...prevUsers, [userId]: username }));
+      setNotifications(prevNotifications => [
+        ...prevNotifications,
+        { type: "info", message: `${username} has joined the chat` }
+      ]);
     });
 
-    socketInstance.on("user-disconnected", ({ userId }) => {
+    socketInstance.on("user-disconnected", ({ userId, username }) => {
       setUsers(prevUsers => {
         const updatedUsers = { ...prevUsers };
         delete updatedUsers[userId];
         return updatedUsers;
       });
+      setNotifications(prevNotifications => [
+        ...prevNotifications,
+        { type: "info", message: `${username} has left the chat` }
+      ]);
     });
 
     return () => {
@@ -120,7 +130,7 @@ const App = () => {
       <header className="bg-blue-500 text-white py-4 px-6 shadow-md">
         <h1 className="text-2xl font-bold">Chat Application</h1>
       </header>
-
+  
       <main className="flex-grow p-6 overflow-auto">
         {!hasJoined ? (
           <div className="max-w-md mx-auto bg-white p-6 rounded-lg shadow-lg">
@@ -161,7 +171,7 @@ const App = () => {
                 onChange={handleFileChange}
                 className="w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-
+  
               {previewUrl && (
                 <div className="mb-4">
                   <h4 className="text-lg font-semibold">Preview:</h4>
@@ -172,7 +182,7 @@ const App = () => {
                   />
                 </div>
               )}
-
+  
               <button
                 type="button"
                 onClick={handleFileUpload}
@@ -187,7 +197,7 @@ const App = () => {
                 Send Message
               </button>
             </form>
-
+  
             {/* Direct Message Form */}
             <form onSubmit={handleDirectMessage} className="flex flex-col mt-4">
               <input
@@ -204,7 +214,18 @@ const App = () => {
                 Send Direct Message
               </button>
             </form>
-
+  
+            {/* Notifications */}
+            {notifications.length > 0 && (
+              <div className="mb-4 p-4 bg-yellow-100 text-yellow-800 rounded-md shadow-md">
+                {notifications.map((notif, index) => (
+                  <div key={index} className="mb-2">
+                    {notif.message}
+                  </div>
+                ))}
+              </div>
+            )}
+  
             {/* Messages and Files */}
             <div className="mt-6">
               <h4 className="text-lg font-semibold mb-2">Messages</h4>
@@ -258,6 +279,7 @@ const App = () => {
       </main>
     </div>
   );
-};
+}
+
 
 export default App;
