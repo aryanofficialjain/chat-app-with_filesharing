@@ -91,7 +91,7 @@ const App = () => {
       formData.append("file", file);
 
       try {
-        const res = await axios.post(`${import.meta.env.VITE_SITE_URL}/upload`, formData, {
+        const res = await axios.post(`${import.meta.env.VITE_SITE_URL}upload`, formData, {
           headers: { "Content-Type": "multipart/form-data" },
         });
 
@@ -123,6 +123,14 @@ const App = () => {
     } else {
       console.error("Socket is not connected or Direct Message User ID is missing");
     }
+  };
+
+  const constructFileUrl = (filePath) => {
+    const baseUrl = import.meta.env.VITE_SITE_URL.endsWith('/') 
+      ? import.meta.env.VITE_SITE_URL.slice(0, -1) 
+      : import.meta.env.VITE_SITE_URL;
+    
+    return `${baseUrl}${filePath.startsWith('/') ? '' : '/'}${filePath}`;
   };
 
   return (
@@ -226,45 +234,31 @@ const App = () => {
               </div>
             )}
   
-            {/* Messages and Files */}
-            <div className="mt-6">
-              <h4 className="text-lg font-semibold mb-2">Messages</h4>
-              <ul className="space-y-4">
-                {allMessages.map((msg, index) => (
-                  <li
-                    key={index}
-                    className={`p-4 rounded-lg shadow ${
-                      msg.senderId === socketId
-                        ? "bg-blue-100 text-right"
-                        : "bg-gray-100 text-left"
-                    } ${msg.isDirect ? "bg-red-100" : ""}`}
-                  >
-                    {msg.isFile && msg.filePath.match(/\.(jpeg|jpg|png|gif)$/) ? (
-                      <div>
-                        <strong>{msg.senderUsername}:</strong>
-                      <a href={`${import.meta.env.VITE_SITE_URL}${msg.filePath}`} target="_blank" download>
-  <img src={`${import.meta.env.VITE_SITE_URL}${msg.filePath}`} alt={msg.fileName} className="w-full max-w-xs rounded-md shadow-md mt-2" />
-</a>
-                      </div>
-                    ) : msg.isFile ? (
-                      <div>
-                        <strong>{msg.senderUsername}:</strong>
-                        <a
-                          href={`${import.meta.env.VITE_SITE_URL}${msg.filePath}`}
-                          target="_blank"
-                          download
-                        >
-                          {msg.fileName}
-                        </a>
-                      </div>
-                    ) : (
-                      <div>
-                        <strong>{msg.senderUsername}:</strong> {msg.message}
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
+            {/* Messages Display */}
+            <div className="mt-4 overflow-auto h-48">
+              {allMessages.map((msg, index) => (
+                <div
+                  key={index}
+                  className={`mb-2 p-2 rounded-md shadow-md ${
+                    msg.isDirect
+                      ? "bg-red-100 text-red-800"
+                      : "bg-gray-200 text-gray-800"
+                  }`}
+                >
+                  <strong>{msg.senderUsername}:</strong> {msg.message}
+                  {msg.isFile && (
+                    <div>
+                      <a
+                        href={constructFileUrl(msg.filePath)}
+                        download={msg.fileName} target="_blank"
+                        className="text-blue-500 underline ml-2"
+                      >
+                        {msg.fileName}
+                      </a>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -272,6 +266,5 @@ const App = () => {
     </div>
   );
 };
-
 
 export default App;
