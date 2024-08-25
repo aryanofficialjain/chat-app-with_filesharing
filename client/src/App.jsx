@@ -242,23 +242,15 @@ const App = () => {
                     {msg.isFile && msg.filePath.match(/\.(jpeg|jpg|png|gif)$/) ? (
                       <div>
                         <strong>{msg.senderUsername}:</strong>
-                        <a
-                          href={`http://localhost:3000${msg.filePath}`}
-                          target="_blank"
-                          download
-                        >
-                          <img
-                            src={`http://localhost:3000${msg.filePath}`}
-                            alt={msg.fileName}
-                            className="w-full max-w-xs rounded-md shadow-md mt-2"
-                          />
-                        </a>
+                      <a href={`${import.meta.env.VITE_SITE_URL}${msg.filePath}`} target="_blank" download>
+  <img src={`${import.meta.env.VITE_SITE_URL}${msg.filePath}`} alt={msg.fileName} className="w-full max-w-xs rounded-md shadow-md mt-2" />
+</a>
                       </div>
                     ) : msg.isFile ? (
                       <div>
                         <strong>{msg.senderUsername}:</strong>
                         <a
-                          href={`http://localhost:3000${msg.filePath}`}
+                          href={`${import.meta.env.VITE_SITE_URL}${msg.filePath}`}
                           target="_blank"
                           download
                         >
